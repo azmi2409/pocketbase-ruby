@@ -2,6 +2,8 @@
 
 A Ruby port of the official [PocketBase JavaScript SDK](https://github.com/pocketbase/js-sdk) — the full client API for [PocketBase](https://pocketbase.io), written in idiomatic Ruby with **zero runtime dependencies** (stdlib only: `net/http`, `json`, `openssl`…).
 
+> Credit: this gem is a port of [pocketbase/js-sdk](https://github.com/pocketbase/js-sdk), created and maintained by the [PocketBase](https://pocketbase.io) team. All API design credit goes to them; this port just brings it to Ruby.
+
 ```ruby
 require "pocketbase"
 
@@ -242,6 +244,11 @@ pb.health.check
 ruby -Ilib -Itest -e 'Dir.glob("test/test_*.rb").each { |f| require_relative f }'
 # or: POCKETBASE_URL=http://127.0.0.1:8090 rake test
 ```
+
+## Credits
+
+- [PocketBase](https://pocketbase.io) team — authors of the original [pocketbase/js-sdk](https://github.com/pocketbase/js-sdk) this gem is ported from.
+- [Azmi Muwahid](https://github.com/azmi2409) — Ruby port.
 
 ## License
 
