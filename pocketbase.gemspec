@@ -17,6 +17,15 @@ Gem::Specification.new do |s|
   s.license = "MIT"
   s.required_ruby_version = ">= 2.7"
 
+  s.metadata = {
+    "homepage_uri" => s.homepage,
+    "source_code_uri" => "#{s.homepage}/tree/main",
+    "bug_tracker_uri" => "#{s.homepage}/issues",
+    "changelog_uri" => "#{s.homepage}/blob/main/CHANGELOG.md",
+    "documentation_uri" => "https://www.rubydoc.info/gems/pocketbase/#{s.version}",
+    "allowed_push_host" => "https://rubygems.org"
+  }
+
   s.files = Dir["lib/**/*.rb", "README.md", "LICENSE", "CHANGELOG.md"]
   s.require_paths = ["lib"]
 end

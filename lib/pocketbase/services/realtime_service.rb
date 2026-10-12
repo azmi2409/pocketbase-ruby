@@ -21,6 +21,10 @@ module PocketBase
       CONNECT_TIMEOUT = 15
 
       attr_reader :client_id
+      # Callback invoked on explicit disconnect or stream interruption.
+      # Receives active subscription keys after connection identity is cleared.
+      # Runs on the caller thread for disconnect, reader thread for interruption.
+      # @return [Proc, nil]
       attr_accessor :on_disconnect
 
       def initialize(client)
@@ -30,6 +34,7 @@ module PocketBase
         @last_sent = []
         @mutex = Mutex.new
         @connect_mutex = Mutex.new
+        @submit_mutex = Mutex.new
         @connect_queue = Queue.new
         @awaiting_initial = false
         @reader_thread = nil
@@ -45,12 +50,26 @@ module PocketBase
 
       # Registers a subscription listener for a topic.
       # Returns an unsubscribe lambda removing only this listener.
+      # Unknown top-level options (filter, expand, fields) become query options.
+      # Failed registration removes this listener and can be retried.
+      #
+      # @param topic [String] SSE topic, e.g. "posts/*" or "@oauth2"
+      # @param options [Hash] Query/params, headers, and extra query options
+      # @yield [data] Parsed event data, delivered on the SSE reader thread
+      # @yieldparam data [Hash] Event payload
+      # @return [Proc] Callable removing only this listener
+      # @raise [ArgumentError] If topic or callback is missing
+      # @raise [ClientResponseError] If connection or subscription update fails
+      # @example Listen for record changes
+      #   unsubscribe = client.realtime.subscribe("posts/*") { |event| puts event["action"] }
+      #   unsubscribe.call
       def subscribe(topic, options = {}, &callback)
         raise ArgumentError, "topic must be set" if topic.nil? || topic.to_s.empty?
         raise ArgumentError, "callback block required" unless callback
 
         key = topic.to_s
         unless options.nil? || options.empty?
+          options = send_options({}, options)
           payload = {
             "query" => options[:query] || options["query"],
             "headers" => options[:headers] || options["headers"],
@@ -67,8 +86,17 @@ module PocketBase
           @subscriptions[key] << listener
         end
 
-        connect unless connected?
-        submit_subscriptions if first_for_key && connected?
+        begin
+          connect unless connected?
+          submit_subscriptions if first_for_key && connected?
+        rescue StandardError
+          @mutex.synchronize do
+            @subscriptions[key]&.delete(listener)
+            @subscriptions.delete(key) if @subscriptions[key]&.empty?
+          end
+          disconnect if @mutex.synchronize { @subscriptions.empty? }
+          raise
+        end
 
         -> { unsubscribe_listener(topic.to_s, listener) }
       end
@@ -103,6 +131,11 @@ module PocketBase
       end
 
       # Closes the SSE connection (keeps registered subscriptions).
+      # Stops and joins the reader, including when the stream is idle.
+      # When called from a listener, the reader exits after callback delivery.
+      # A later subscription reconnects and restores registered subscriptions.
+      #
+      # @return [nil]
       def disconnect
         keys = []
         had_client = false
@@ -116,7 +149,10 @@ module PocketBase
         @on_disconnect&.call(keys) if had_client
 
         thread = @mutex.synchronize { @reader_thread }
-        thread.join(5) if thread && thread != Thread.current && thread.alive?
+        if thread && thread != Thread.current
+          thread.kill
+          thread.join
+        end
         @mutex.synchronize { @reader_thread = nil if @reader_thread == thread }
         nil
       end
@@ -180,6 +216,13 @@ module PocketBase
               break
             end
           end
+          keys = @mutex.synchronize do
+            had_client = !@client_id.empty?
+            @client_id = ""
+            @last_sent = []
+            had_client ? @subscriptions.keys : nil
+          end
+          @on_disconnect&.call(keys) if keys
 
           break if stopped?
 
@@ -193,7 +236,6 @@ module PocketBase
           attempts += 1
           break if stopped?
 
-          @mutex.synchronize { @client_id = ""; @last_sent = [] }
         end
       end
 
@@ -288,26 +330,26 @@ module PocketBase
       end
 
       def submit_subscriptions
-        keys = @mutex.synchronize { @subscriptions.select { |_, v| v.any? }.keys }
-
-        if keys.empty?
+        if @mutex.synchronize { @subscriptions.empty? }
           disconnect
           return
         end
 
-        client_id = @mutex.synchronize { @client_id }
-        return if client_id.empty?
+        @submit_mutex.synchronize do
+          keys = @mutex.synchronize { @subscriptions.select { |_, v| v.any? }.keys }
+          client_id = @mutex.synchronize { @client_id }
+          return if client_id.empty?
 
-        last_sent = @mutex.synchronize { @last_sent }
-        return if (keys - last_sent).empty? && (last_sent - keys).empty?
+          last_sent = @mutex.synchronize { @last_sent }
+          return if (keys - last_sent).empty? && (last_sent - keys).empty?
 
-        @mutex.synchronize { @last_sent = keys }
-
-        @client.send_request(
-          "/api/realtime",
-          method: "POST",
-          body: { "clientId" => client_id, "subscriptions" => keys }
-        )
+          @client.send_request(
+            "/api/realtime",
+            method: "POST",
+            body: { "clientId" => client_id, "subscriptions" => keys }
+          )
+          @mutex.synchronize { @last_sent = keys if @client_id == client_id }
+        end
       rescue ClientResponseError
         raise
       rescue StandardError => e

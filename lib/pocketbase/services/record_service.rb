@@ -87,7 +87,7 @@ module PocketBase
       end
 
       # Authenticates with username/email + password. On success the client
-      # auth store is updated and {token, record, meta} is returned.
+      # auth store is updated and a Hash with token, record, and meta is returned.
       #
       # For the _superusers collection you may pass
       # `auto_refresh_threshold:` (seconds) to auto-refresh the token.

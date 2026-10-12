@@ -40,14 +40,6 @@ class TestClient < PocketBaseIntegrationTest
     pb.before_send = nil
   end
 
-  def test_before_send_can_modify_url
-    pb.before_send = lambda do |url, options|
-      { url: url.gsub("/api/health", "/api/health"), options: options }
-    end
-    assert_equal 200, pb.health.check["code"]
-  ensure
-    pb.before_send = nil
-  end
 
   def test_after_send_hook
     pb.after_send = lambda do |response, data, _options|

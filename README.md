@@ -74,6 +74,9 @@ pb.before_send = ->(url, options) { { url: url, options: options } }
 pb.after_send  = ->(response, data, options) { data } # response.status / .headers / .url
 ```
 
+`before_send` accepts symbol- or string-keyed `url`/`options` results. Returning nil keeps current request options.
+Redirects preserve methods and bodies except POST on 301/302 and non-GET/HEAD on 303. Credentials are removed when redirect origin changes.
+
 Errors raise `PocketBase::ClientResponseError` with `#status`, `#url`, `#response` (aliased `#data`), `#original_error`, `#is_abort`.
 
 ## Auth store
@@ -95,6 +98,8 @@ pb.auth_store.load_from_cookie(request.headers["Cookie"])
 # file-persisted store (like the js-sdk LocalAuthStore)
 pb2 = PocketBase.new(url, auth_store: PocketBase::FileAuthStore.new("~/.pb_auth.json"))
 ```
+
+`FileAuthStore` expands `~` in paths. Write failures raise their original filesystem error; do not treat failed saves or clears as persisted.
 
 ## Records & auth
 
@@ -244,6 +249,21 @@ pb.health.check
 ruby -Ilib -Itest -e 'Dir.glob("test/test_*.rb").each { |f| require_relative f }'
 # or: POCKETBASE_URL=http://127.0.0.1:8090 rake test
 ```
+
+Offline checks need no PocketBase process:
+
+```bash
+rake test_offline
+```
+
+### RubyGems release
+
+```bash
+rake build # runs offline checks, then builds pocketbase-0.1.1.gem
+gem push pocketbase-0.1.1.gem --host https://rubygems.org
+```
+
+Publishing requires a RubyGems account with access to the `pocketbase` name and a push-enabled API key (or interactive login). Complete any required MFA challenge. Never commit credentials or API keys. RubyDoc links use the published gem version and its source comments.
 
 ## Credits
 

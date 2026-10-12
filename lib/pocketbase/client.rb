@@ -105,13 +105,27 @@ module PocketBase
     #   timeout: request timeout in seconds
     #   Any other top-level option is moved into the query string.
     #
+    # The before_send hook receives (url, options) and may return a Hash with
+    # symbol or string keys for url/options; nil preserves current options.
+    # The after_send hook receives (ResponseInfo, parsed_data, options), and
+    # its return value becomes the result, including the API error payload.
+    # Redirects drop credentials across origins. POST becomes GET on 301/302;
+    # non-GET/HEAD becomes GET on 303. Other redirects retain method and body.
+    #
+    # @param path [String] API path relative to base_url
+    # @param options [Hash] Request options and extra query parameters
+    # @return [Hash, Array, nil] Parsed JSON, nil for an empty body, or hook result
+    # @raise [ClientResponseError] On transport errors or HTTP status >= 400
+    # @example Request health with a timeout
+    #   client.send_request("/api/health", timeout: 10)
+    #
     # Raises PocketBase::ClientResponseError on transport or API errors.
     def send_request(path, options = {})
       options = init_send_options(options)
       url = build_url(path)
 
       if @before_send
-        result = @before_send.call(url, options) || {}
+        result = @before_send.call(url, options)
         result = normalize_hook_result(result)
         url = result[:url] if result[:url]
         options = result[:options] if result[:options]
@@ -233,8 +247,10 @@ module PocketBase
 
     def normalize_hook_result(result)
       return {} if result.nil?
-      return result if result.is_a?(Hash) && (result.key?(:url) || result.key?("url") ||
-                                             result.key?(:options) || result.key?("options"))
+      if result.is_a?(Hash) && (result.key?(:url) || result.key?("url") ||
+                               result.key?(:options) || result.key?("options"))
+        return { url: result[:url] || result["url"], options: result[:options] || result["options"] }
+      end
 
       # legacy behavior: the whole result replaces the options
       { options: result }
@@ -339,11 +355,20 @@ module PocketBase
         raise ClientResponseError.new(url: url, status: response.code.to_i, response: {}) if redirects <= 0
 
         location = response["location"]
-        new_url = URI.join(url, location).to_s
+        target = URI.join(url, location)
+        new_url = target.to_s
+        if [uri.scheme, uri.host, uri.port] != [target.scheme, target.host, target.port]
+          headers = headers.reject { |key, _| %w[authorization cookie proxy-authorization].include?(key.to_s.downcase) }
+        end
         url_tracker&.call(new_url)
-        # follow redirects as GET unless 307/308
-        new_method = %w[307 308].include?(response.code) ? method : "GET"
-        perform_request(new_url, new_method, headers, new_method == "GET" ? nil : body,
+        switch_to_get = (%w[301 302].include?(response.code) && method == "POST") ||
+                        (response.code == "303" && !%w[GET HEAD].include?(method))
+        new_method = switch_to_get ? "GET" : method
+        if switch_to_get
+          body = nil
+          headers = headers.reject { |key, _| %w[content-type content-length transfer-encoding].include?(key.to_s.downcase) }
+        end
+        perform_request(new_url, new_method, headers, body,
                         timeout, redirects - 1, &url_tracker)
       else
         response

@@ -59,6 +59,15 @@ module PocketBase
     # Registers a callback invoked on every store change with (token, record).
     # Returns an unsubscribe lambda. Pass fire_immediately: true to invoke
     # the callback right away with the current state.
+    # Listeners present at dispatch start receive the change even when another
+    # listener unsubscribes itself. New listeners start with the next change.
+    #
+    # @param fire_immediately [Boolean] Deliver current state upon registration
+    # @yield [token, record] Called synchronously when authentication changes
+    # @yieldparam token [String] Current token
+    # @yieldparam record [Hash, nil] Current authenticated record
+    # @return [Proc] Unsubscribe callable
+    # @raise [ArgumentError] If no callback block is given
     def on_change(fire_immediately: false, &callback)
       raise ArgumentError, "callback block required" unless callback
 
@@ -121,7 +130,7 @@ module PocketBase
     private
 
     def trigger_change
-      @on_change_callbacks.each { |cb| cb&.call(@token, @record) }
+      @on_change_callbacks.dup.each { |cb| cb&.call(@token, @record) }
     end
 
     def parse_cookie(cookie)
@@ -154,8 +163,15 @@ module PocketBase
   class FileAuthStore < AuthStore
     attr_reader :path
 
+    # Loads existing auth state, or saves supplied initial state.
+    # Parent directory must exist. Missing or unreadable state loads empty.
+    #
+    # @param path [String] File path; relative paths and ~ are expanded
+    # @param token [String, nil] Optional initial token
+    # @param record [Hash, nil] Optional initial authenticated record
+    # @raise [SystemCallError, IOError] If initial state cannot be persisted
     def initialize(path, token = nil, record = nil)
-      @path = path.to_s
+      @path = File.expand_path(path.to_s)
       super()
       if token || record
         save(token, record)
@@ -164,12 +180,24 @@ module PocketBase
       end
     end
 
+    # Updates memory, notifies listeners, then writes authentication to disk.
+    # Write failures propagate; memory may already contain the new state.
+    #
+    # @param token [String, nil] Token to save
+    # @param record [Hash, nil] Authenticated record
+    # @return [FileAuthStore] This store
+    # @raise [SystemCallError, IOError] If state cannot be written
     def save(token, record = nil)
       super
       persist_to_file
       self
     end
 
+    # Clears authentication in memory and persists the cleared state.
+    # A write failure does not guarantee removal of the previous disk token.
+    #
+    # @return [FileAuthStore] This store
+    # @raise [SystemCallError, IOError] If cleared state cannot be written
     def clear
       super
       persist_to_file
@@ -191,8 +219,6 @@ module PocketBase
 
     def persist_to_file
       File.write(@path, JSON.generate({ "token" => @token, "record" => @record }))
-    rescue StandardError
-      nil
     end
   end
 end

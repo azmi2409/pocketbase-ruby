@@ -60,6 +60,32 @@ class TestAuthStore < Minitest::Test
     assert_equal [["tok", { "id" => "x" }]], seen
   end
 
+  def test_callback_removal_does_not_skip_next_listener
+    store = PocketBase::AuthStore.new
+    seen = []
+    unsubscribe = store.on_change { unsubscribe.call }
+    store.on_change { |token, _| seen << token }
+    store.save("first")
+    store.save("second")
+    assert_equal ["first", "second"], seen
+  end
+
+  def test_file_store_expands_home_and_reports_write_failure
+    Dir.mktmpdir do |dir|
+      old_home = ENV["HOME"]
+      begin
+        ENV["HOME"] = dir
+        PocketBase::FileAuthStore.new("~/auth.json").save("token")
+        assert_equal "token", PocketBase::FileAuthStore.new(File.join(dir, "auth.json")).token
+        assert_raises(Errno::ENOENT) do
+          PocketBase::FileAuthStore.new(File.join(dir, "missing", "auth.json")).save("token")
+        end
+      ensure
+        ENV["HOME"] = old_home
+      end
+    end
+  end
+
   def test_cookie_roundtrip
     store = PocketBase::AuthStore.new
     token = "eyJhbGciOiJIUzI1NiJ9.eyJ0eXBlIjoiYXV0aCIsImV4cCI6OTk5OTk5OTk5OX0.sig"
