@@ -28,4 +28,8 @@ Gem::Specification.new do |s|
 
   s.files = Dir["lib/**/*.rb", "README.md", "LICENSE", "CHANGELOG.md"]
   s.require_paths = ["lib"]
+
+  # base64 is a bundled gem, not a default gem, since Ruby 3.4 — declare it so
+  # `require "base64"` keeps working there. Still stdlib-only, no third-party deps.
+  s.add_dependency "base64"
 end
