@@ -1,5 +1,9 @@
 # pocketbase (Ruby)
 
+[![CI](https://github.com/azmi2409/pocketbase-ruby/actions/workflows/ci.yml/badge.svg)](https://github.com/azmi2409/pocketbase-ruby/actions/workflows/ci.yml)
+[![Gem Version](https://badge.fury.io/rb/pocketbase.svg)](https://rubygems.org/gems/pocketbase)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A Ruby port of the official [PocketBase JavaScript SDK](https://github.com/pocketbase/js-sdk) — the full client API for [PocketBase](https://pocketbase.io), written in idiomatic Ruby with **zero runtime dependencies** (stdlib only: `net/http`, `json`, `openssl`…).
 
 > Credit: this gem is a port of [pocketbase/js-sdk](https://github.com/pocketbase/js-sdk), created and maintained by the [PocketBase](https://pocketbase.io) team. All API design credit goes to them; this port just brings it to Ruby.
@@ -269,6 +273,12 @@ Publishing requires a RubyGems account with access to the `pocketbase` name and 
 
 - [PocketBase](https://pocketbase.io) team — authors of the original [pocketbase/js-sdk](https://github.com/pocketbase/js-sdk) this gem is ported from.
 - [Azmi Muwahid](https://github.com/azmi2409) — Ruby port.
+
+## Maintainers
+
+This project is open to co-maintainers. If you use this gem and want to help keep it in sync with [pocketbase/js-sdk](https://github.com/pocketbase/js-sdk) — reviewing PRs, triaging issues, cutting releases — open an issue and say hi.
+
+Current maintainer: [Azmi Muwahid](https://github.com/azmi2409)
 
 ## License
 
